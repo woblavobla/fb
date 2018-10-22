@@ -177,7 +177,7 @@ static long calculate_buffsize(XSQLDA *sqlda)
 
 		offset = FB_ALIGN(offset, alignment);
 		offset += length;
-		offset = FB_ALIGN(offset, sizeof(short));
+		offset = FB_ALIGN((size_t)offset, sizeof(short));
 		offset += sizeof(short);
 	}
 
@@ -189,10 +189,11 @@ static VALUE fb_error_msg(const ISC_STATUS *isc_status)
 {
 	char msg[1024];
 	VALUE result = rb_str_new(NULL, 0);
+	const size_t suffixLen = strlen("\n");
 	while (fb_interpret(msg, 1024, &isc_status))
 	{
 		result = rb_str_cat(result, msg, strlen(msg));
-		result = rb_str_cat(result, "\n", strlen("\n"));
+		result = rb_str_cat(result, "\n", suffixLen);
 	}
 	return result;
 }
@@ -483,7 +484,7 @@ static XSQLDA* sqlda_alloc(long cols)
 {
 	XSQLDA *sqlda;
 
-	sqlda = (XSQLDA*)xmalloc(XSQLDA_LENGTH(cols));
+	sqlda = (XSQLDA*)xmalloc(XSQLDA_LENGTH((size_t)cols));
 #ifdef SQLDA_CURRENT_VERSION
 	sqlda->version = SQLDA_CURRENT_VERSION;
 #else
@@ -703,8 +704,6 @@ static char* trans_parseopts(VALUE opt, long *tpb_len)
 		s++;
 	}
 
-	used = 0;
-	size = 0;
 	tpb = NULL;
 	memset((void *)check_f, 0, sizeof(check_f));
 
@@ -758,7 +757,11 @@ static char* trans_parseopts(VALUE opt, long *tpb_len)
 				check_f[target_p->position] = 1;
 			} else {
 				if (used + 1 > size) {
-					tpb = (char *)realloc(tpb, size + TPBBUFF_ALLOC);
+					char *tmp_tpb = (char *)realloc(tpb, (size_t)(size + TPBBUFF_ALLOC));
+					if (tmp_tpb == NULL) {
+					} else {
+						tpb = tmp_tpb;
+					}
 					size += TPBBUFF_ALLOC;
 				}
 				tpb[used] = target_p->optval;
@@ -794,7 +797,7 @@ static char* trans_parseopts(VALUE opt, long *tpb_len)
 					if (*resv_p == '\0' || (ofs = strspn(resv_p, LIST_DELIMIT)) < 0) {
 						resv_p++;
 					} else {
-						resv_p = &resv_p[ofs];
+						resv_p = &resv_p[(size_t)ofs];
 						tblend_p = strpbrk(resv_p, LIST_DELIMIT);
 						if (tblend_p) {
 							tbl_len = tblend_p - resv_p;
@@ -808,7 +811,7 @@ static char* trans_parseopts(VALUE opt, long *tpb_len)
 
 						if (tbl_len > 0) {
 							if (used + tbl_len + 3 > size) {
-								tpb = (char*)xrealloc(tpb, size+TPBBUFF_ALLOC);
+								tpb = (char*)xrealloc(tpb, (size_t)(size+TPBBUFF_ALLOC));
 								size += TPBBUFF_ALLOC;
 							}
 							tpb[used+1] = (char)tbl_len;
@@ -1298,7 +1301,7 @@ static VALUE sql_decimal_to_bigdecimal(long long sql_data, int scale)
 	char bigdecimal_buffer[23];
 	int  bigdecimal_dot;
 	sprintf(bigdecimal_buffer, "%022lld", sql_data);
-	bigdecimal_dot = strlen(bigdecimal_buffer) + scale;
+	bigdecimal_dot = strlen(bigdecimal_buffer) + (size_t)scale;
 	for (i = strlen(bigdecimal_buffer); i > bigdecimal_dot; i--)
 		bigdecimal_buffer[i] = bigdecimal_buffer[i-1];
 	bigdecimal_buffer[bigdecimal_dot] = '.';
@@ -1366,13 +1369,13 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 				case SQL_TEXT :
 					alignment = 1;
 					offset = FB_ALIGN(offset, alignment);
-					var->sqldata = (char *)(fb_cursor->i_buffer + offset);
+					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					obj = rb_obj_as_string(obj);
 					if (RSTRING_LEN(obj) > var->sqllen) {
 						rb_raise(rb_eRangeError, "CHAR overflow: %ld bytes exceeds %d byte(s) allowed.",
 							RSTRING_LEN(obj), var->sqllen);
 					}
-					memcpy(var->sqldata, RSTRING_PTR(obj), RSTRING_LEN(obj));
+					memcpy(var->sqldata, RSTRING_PTR(obj), (size_t)RSTRING_LEN(obj));
 					var->sqllen = RSTRING_LEN(obj);
 					offset += var->sqllen + 1;
 					break;
@@ -1380,21 +1383,21 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 				case SQL_VARYING :
 					alignment = sizeof(short);
 					offset = FB_ALIGN(offset, alignment);
-					var->sqldata = (char *)(fb_cursor->i_buffer + offset);
+					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					vary = (VARY *)var->sqldata;
 					obj = rb_obj_as_string(obj);
 					if (RSTRING_LEN(obj) > var->sqllen) {
 						rb_raise(rb_eRangeError, "VARCHAR overflow: %ld bytes exceeds %d byte(s) allowed.",
 							RSTRING_LEN(obj), var->sqllen);
 					}
-					memcpy(vary->vary_string, RSTRING_PTR(obj), RSTRING_LEN(obj));
+					memcpy(vary->vary_string, RSTRING_PTR(obj), (size_t)RSTRING_LEN(obj));
 					vary->vary_length = RSTRING_LEN(obj);
 					offset += vary->vary_length + sizeof(short);
 					break;
 
 				case SQL_SHORT :
 					offset = FB_ALIGN(offset, alignment);
-					var->sqldata = (char *)(fb_cursor->i_buffer + offset);
+					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					if (var->sqlscale < 0) {
 						lvalue = NUM2LONG(object_to_unscaled_bigdecimal(obj, var->sqlscale));
 					} else {
@@ -1409,7 +1412,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 
 				case SQL_LONG :
 					offset = FB_ALIGN(offset, alignment);
-					var->sqldata = (char *)(fb_cursor->i_buffer + offset);
+					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					if (var->sqlscale < 0) {
 						lvalue = NUM2LONG(object_to_unscaled_bigdecimal(obj, var->sqlscale));
 					} else {
@@ -1424,7 +1427,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 
 				case SQL_FLOAT :
 					offset = FB_ALIGN(offset, alignment);
-					var->sqldata = (char *)(fb_cursor->i_buffer + offset);
+					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					obj = double_from_obj(obj);
 					dvalue = NUM2DBL(obj);
 					if (dvalue >= 0.0) {
@@ -1441,7 +1444,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 
 				case SQL_DOUBLE :
 					offset = FB_ALIGN(offset, alignment);
-					var->sqldata = (char *)(fb_cursor->i_buffer + offset);
+					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					obj = double_from_obj(obj);
 					dvalue = NUM2DBL(obj);
 					*(double *)var->sqldata = dvalue;
@@ -1450,7 +1453,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 
 				case SQL_INT64 :
 					offset = FB_ALIGN(offset, alignment);
-					var->sqldata = (char *)(fb_cursor->i_buffer + offset);
+					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 
 					if (var->sqlscale < 0) {
 						llvalue = NUM2LL(object_to_unscaled_bigdecimal(obj, var->sqlscale));
@@ -1464,7 +1467,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 
 				case SQL_BLOB :
 					offset = FB_ALIGN(offset, alignment);
-					var->sqldata = (char *)(fb_cursor->i_buffer + offset);
+					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					obj = rb_obj_as_string(obj);
 
 					blob_handle = 0;
@@ -1493,7 +1496,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 
 				case SQL_TIMESTAMP :
 					offset = FB_ALIGN(offset, alignment);
-					var->sqldata = (char *)(fb_cursor->i_buffer + offset);
+					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					tm_from_timestamp(&tms, obj);
 					isc_encode_timestamp(&tms, (ISC_TIMESTAMP *)var->sqldata);
 					offset += alignment;
@@ -1501,7 +1504,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 
 				case SQL_TYPE_TIME :
 					offset = FB_ALIGN(offset, alignment);
-					var->sqldata = (char *)(fb_cursor->i_buffer + offset);
+					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					tm_from_timestamp(&tms, obj);
 					isc_encode_sql_time(&tms, (ISC_TIME *)var->sqldata);
 					offset += alignment;
@@ -1509,7 +1512,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 
 				case SQL_TYPE_DATE :
 					offset = FB_ALIGN(offset, alignment);
-					var->sqldata = (char *)(fb_cursor->i_buffer + offset);
+					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					tm_from_date(&tms, obj);
 					isc_encode_sql_date(&tms, (ISC_DATE *)var->sqldata);
 					offset += alignment;
@@ -1530,14 +1533,14 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 #endif
 
 #if (FB_API_VER >= 30)
-                            case SQL_BOOLEAN:
-							case blr_bool:
-							case blr_boolean:
-                                        offset = FB_ALIGN(offset, alignment);
-					var->sqldata = (char *)(fb_cursor->i_buffer + offset);
+                case SQL_BOOLEAN:
+				case blr_bool:
+				case blr_boolean:
+                    offset = FB_ALIGN(offset, alignment);
+					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					*(bool *)var->sqldata = obj;
 					offset += alignment;					
-                                        break;
+                    break;
 #endif
 				default :
 					rb_raise(rb_eFbError, "Specified table includes unsupported datatype (%d)", dtp);
@@ -1545,14 +1548,14 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 
 			if (var->sqltype & 1) {
 				offset = FB_ALIGN(offset, sizeof(short));
-				var->sqlind = (short *)(fb_cursor->i_buffer + offset);
+				var->sqlind = (short *)(fb_cursor->i_buffer + (size_t)offset);
 				*var->sqlind = 0;
 				offset += sizeof(short);
 			}
 		} else if (var->sqltype & 1) {
 			var->sqldata = 0;
 			offset = FB_ALIGN(offset, sizeof(short));
-			var->sqlind = (short *)(fb_cursor->i_buffer + offset);
+			var->sqlind = (short *)(fb_cursor->i_buffer + (size_t)offset);
 			*var->sqlind = -1;
 			offset += sizeof(short);
 		} else {
@@ -1758,10 +1761,10 @@ static void fb_cursor_fetch_prep(struct FbCursor *fb_cursor)
 			alignment = sizeof(short);
 		}
 		offset = FB_ALIGN(offset, alignment);
-		var->sqldata = (char*)(fb_cursor->o_buffer + offset);
+		var->sqldata = (char*)(fb_cursor->o_buffer + (size_t)offset);
 		offset += length;
 		offset = FB_ALIGN(offset, sizeof(short));
-		var->sqlind = (short*)(fb_cursor->o_buffer + offset);
+		var->sqlind = (short*)(fb_cursor->o_buffer + (size_t)offset);
 		offset += sizeof(short);
 	}
 }
@@ -2056,7 +2059,7 @@ static VALUE cursor_execute2(VALUE args)
 	if (in_params) {
 		length = calculate_buffsize(fb_cursor->i_sqlda);
 		if (length > fb_cursor->i_buffer_size) {
-			fb_cursor->i_buffer = xrealloc(fb_cursor->i_buffer, length);
+			fb_cursor->i_buffer = xrealloc(fb_cursor->i_buffer, (size_t)length);
 			fb_cursor->i_buffer_size = length;
 		}
 	}
@@ -2101,7 +2104,7 @@ static VALUE cursor_execute2(VALUE args)
 		/* Get the size of results buffer and reallocate it */
 		length = calculate_buffsize(fb_cursor->o_sqlda);
 		if (length > fb_cursor->o_buffer_size) {
-			fb_cursor->o_buffer = xrealloc(fb_cursor->o_buffer, length);
+			fb_cursor->o_buffer = xrealloc(fb_cursor->o_buffer, (size_t)length);
 			fb_cursor->o_buffer_size = length;
 		}
 
@@ -2445,10 +2448,10 @@ static char* dbp_add_string(char *dbp, char isc_dbp_code, char *s, long *length)
 	long s_len = strlen(s);
 	*length += 2 + s_len;
 	REALLOC_N(dbp, char, *length);
-	buf = dbp + old_length;
+	buf = dbp + (size_t)old_length;
 	*buf++ = isc_dbp_code;
 	*buf++ = (char)s_len;
-	memcpy(buf, s, s_len);
+	memcpy(buf, s, (size_t)s_len);
 	return dbp;
 }
 
