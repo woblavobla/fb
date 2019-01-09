@@ -175,7 +175,7 @@ static long calculate_buffsize(XSQLDA *sqlda)
 			alignment = sizeof(short);
 		}
 
-		offset = FB_ALIGN(offset, alignment);
+		offset = FB_ALIGN((size_t)offset, alignment);
 		offset += length;
 		offset = FB_ALIGN((size_t)offset, sizeof(short));
 		offset += sizeof(short);
@@ -1368,7 +1368,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 			switch (dtp) {
 				case SQL_TEXT :
 					alignment = 1;
-					offset = FB_ALIGN(offset, alignment);
+					offset = FB_ALIGN((size_t)offset, alignment);
 					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					obj = rb_obj_as_string(obj);
 					if (RSTRING_LEN(obj) > var->sqllen) {
@@ -1382,7 +1382,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 
 				case SQL_VARYING :
 					alignment = sizeof(short);
-					offset = FB_ALIGN(offset, alignment);
+					offset = FB_ALIGN((size_t)offset, alignment);
 					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					vary = (VARY *)var->sqldata;
 					obj = rb_obj_as_string(obj);
@@ -1396,7 +1396,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 					break;
 
 				case SQL_SHORT :
-					offset = FB_ALIGN(offset, alignment);
+					offset = FB_ALIGN((size_t)offset, alignment);
 					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					if (var->sqlscale < 0) {
 						lvalue = NUM2LONG(object_to_unscaled_bigdecimal(obj, var->sqlscale));
@@ -1411,7 +1411,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 					break;
 
 				case SQL_LONG :
-					offset = FB_ALIGN(offset, alignment);
+					offset = FB_ALIGN((size_t)offset, alignment);
 					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					if (var->sqlscale < 0) {
 						lvalue = NUM2LONG(object_to_unscaled_bigdecimal(obj, var->sqlscale));
@@ -1426,7 +1426,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 					break;
 
 				case SQL_FLOAT :
-					offset = FB_ALIGN(offset, alignment);
+					offset = FB_ALIGN((size_t)offset, alignment);
 					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					obj = double_from_obj(obj);
 					dvalue = NUM2DBL(obj);
@@ -1443,7 +1443,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 					break;
 
 				case SQL_DOUBLE :
-					offset = FB_ALIGN(offset, alignment);
+					offset = FB_ALIGN((size_t)offset, alignment);
 					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					obj = double_from_obj(obj);
 					dvalue = NUM2DBL(obj);
@@ -1452,7 +1452,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 					break;
 
 				case SQL_INT64 :
-					offset = FB_ALIGN(offset, alignment);
+					offset = FB_ALIGN((size_t)offset, alignment);
 					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 
 					if (var->sqlscale < 0) {
@@ -1466,7 +1466,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 					break;
 
 				case SQL_BLOB :
-					offset = FB_ALIGN(offset, alignment);
+					offset = FB_ALIGN((size_t)offset, alignment);
 					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					obj = rb_obj_as_string(obj);
 
@@ -1495,7 +1495,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 					break;
 
 				case SQL_TIMESTAMP :
-					offset = FB_ALIGN(offset, alignment);
+					offset = FB_ALIGN((size_t)offset, alignment);
 					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					tm_from_timestamp(&tms, obj);
 					isc_encode_timestamp(&tms, (ISC_TIMESTAMP *)var->sqldata);
@@ -1503,7 +1503,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 					break;
 
 				case SQL_TYPE_TIME :
-					offset = FB_ALIGN(offset, alignment);
+					offset = FB_ALIGN((size_t)offset, alignment);
 					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					tm_from_timestamp(&tms, obj);
 					isc_encode_sql_time(&tms, (ISC_TIME *)var->sqldata);
@@ -1511,7 +1511,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 					break;
 
 				case SQL_TYPE_DATE :
-					offset = FB_ALIGN(offset, alignment);
+					offset = FB_ALIGN((size_t)offset, alignment);
 					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					tm_from_date(&tms, obj);
 					isc_encode_sql_date(&tms, (ISC_DATE *)var->sqldata);
@@ -1536,7 +1536,7 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
                 case SQL_BOOLEAN:
 				case blr_bool:
 				case blr_boolean:
-                    offset = FB_ALIGN(offset, alignment);
+                    offset = FB_ALIGN((size_t)offset, alignment);
 					var->sqldata = (char *)(fb_cursor->i_buffer + (size_t)offset);
 					*(bool *)var->sqldata = obj;
 					offset += alignment;					
@@ -1547,14 +1547,14 @@ static void fb_cursor_set_inputparams(struct FbCursor *fb_cursor, long argc, VAL
 			}
 
 			if (var->sqltype & 1) {
-				offset = FB_ALIGN(offset, sizeof(short));
+				offset = FB_ALIGN((size_t)offset, sizeof(short));
 				var->sqlind = (short *)(fb_cursor->i_buffer + (size_t)offset);
 				*var->sqlind = 0;
 				offset += sizeof(short);
 			}
 		} else if (var->sqltype & 1) {
 			var->sqldata = 0;
-			offset = FB_ALIGN(offset, sizeof(short));
+			offset = FB_ALIGN((size_t)offset, sizeof(short));
 			var->sqlind = (short *)(fb_cursor->i_buffer + (size_t)offset);
 			*var->sqlind = -1;
 			offset += sizeof(short);
@@ -1760,10 +1760,10 @@ static void fb_cursor_fetch_prep(struct FbCursor *fb_cursor)
 			length += sizeof(short);
 			alignment = sizeof(short);
 		}
-		offset = FB_ALIGN(offset, alignment);
+		offset = FB_ALIGN((size_t)offset, alignment);
 		var->sqldata = (char*)(fb_cursor->o_buffer + (size_t)offset);
 		offset += length;
-		offset = FB_ALIGN(offset, sizeof(short));
+		offset = FB_ALIGN((size_t)offset, sizeof(short));
 		var->sqlind = (short*)(fb_cursor->o_buffer + (size_t)offset);
 		offset += sizeof(short);
 	}
@@ -2649,6 +2649,7 @@ static VALUE connection_columns(VALUE self, VALUE table_name)
     VALUE upcase_table_name = rb_funcall(table_name, rb_intern("upcase"), 0);
     VALUE query_parms[] = { query, upcase_table_name };
     VALUE rs = connection_query(2, query_parms, self);
+	ID match_id = rb_intern("match");
     Data_Get_Struct(self, struct FbConnection, fb_connection);
     for (i = 0; i < RARRAY_LEN(rs); i++) {
         VALUE row = rb_ary_entry(rs, i);
@@ -2668,7 +2669,7 @@ static VALUE connection_columns(VALUE self, VALUE table_name)
         if (fb_connection->downcase_names && no_lowercase(name)) {
           rb_funcall(name, id_downcase_bang, 0);
         }
-        if (rb_funcall(re_rdb, rb_intern("match"), 1, domain) != Qnil) {
+        if (rb_funcall(re_rdb, match_id, 1, domain) != Qnil) {
             domain = Qnil;
         }
         if (sql_subtype == Qnil) {
