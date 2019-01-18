@@ -351,6 +351,11 @@ static VALUE double_from_obj(VALUE obj)
 	return obj;
 }
 
+static VALUE rb_ro_trans_p()
+{
+	return rb_str_new2("READ ONLY NO WAIT ISOLATION LEVEL READ COMMITTED RECORD_VERSION");
+}
+
 static VALUE fb_sql_type_from_code(int code, int subtype)
 {
 	const char *sql_type = NULL;
@@ -927,20 +932,24 @@ error:
 static void fb_connection_transaction_start(struct FbConnection *fb_connection, VALUE opt)
 {
 	char *tpb = 0;
+	static char isc_tpb[5] = {isc_tpb_version1,
+				      isc_tpb_write,
+				      isc_tpb_read_committed,
+				      isc_tpb_wait,
+				      isc_tpb_no_rec_version};
 	long tpb_len;
 
 	if (fb_connection->transact) {
 		rb_raise(rb_eFbError, "A transaction has been already started");
 	}
 
-	if (!NIL_P(opt)) {
+	if (!NIL_P(opt) && opt != Qnil) {
 		tpb = trans_parseopts(opt, &tpb_len);
+		isc_start_transaction(fb_connection->isc_status, &fb_connection->transact, 1, &fb_connection->db, tpb_len, tpb);
 	} else {
-		tpb_len = 0;
-		tpb = NULL;
+		isc_start_transaction(fb_connection->isc_status, &fb_connection->transact, 1, &fb_connection->db, 5, isc_tpb);
 	}
 
-	isc_start_transaction(fb_connection->isc_status, &fb_connection->transact, 1, &fb_connection->db, tpb_len, tpb);
 	xfree(tpb);
 	fb_error_check(fb_connection->isc_status);
 }
@@ -977,6 +986,8 @@ static VALUE connection_transaction(int argc, VALUE *argv, VALUE self)
 	rb_scan_args(argc, argv, "01", &opt);
 	Data_Get_Struct(self, struct FbConnection, fb_connection);
 
+	if (opt != Qnil) {printf("connection_transaction: %s\n", StringValuePtr(opt));}
+	//if (opt == Qnil) { opt = rb_ro_trans_p(); }
 	fb_connection_transaction_start(fb_connection, opt);
 
 	if (rb_block_given_p()) {
@@ -2159,11 +2170,6 @@ static ISC_LONG fb_statement_type(struct FbConnection *fb_connection, struct FbC
 	return statement_type;
 }
 
-static VALUE rb_ro_trans_p()
-{
-	return rb_str_new2("READ ONLY NO WAIT ISOLATION LEVEL READ COMMITTED RECORD_VERSION");
-}
-
 /* call-seq:
  *   execute(sql, *args) -> nil or rows affected
  *
@@ -2203,6 +2209,7 @@ static VALUE cursor_execute(int argc, VALUE* argv, VALUE self)
 		if (statement_type == isc_info_sql_stmt_select) {
 			fb_connection_transaction_start(fb_connection, rb_ro_trans_p());
 		} else {
+			printf("Running cause statement not select\n");
 			fb_connection_transaction_start(fb_connection, Qnil);
 		}
 		fb_cursor->auto_transact = fb_connection->transact;
