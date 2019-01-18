@@ -82,7 +82,7 @@ static ID id_force_encoding;
 /* static char isc_info_buff[16]; */
 static char isc_tpb_0[] = {
     isc_tpb_version3,		isc_tpb_write,
-    isc_tpb_concurrency,	isc_tpb_nowait
+    isc_tpb_read_committed,	isc_tpb_nowait
 };
 
 /* structs */
@@ -936,7 +936,7 @@ static void fb_connection_transaction_start(struct FbConnection *fb_connection, 
 				      isc_tpb_write,
 				      isc_tpb_read_committed,
 				      isc_tpb_wait,
-				      isc_tpb_no_rec_version};
+					  isc_tpb_rec_version};
 	long tpb_len;
 
 	if (fb_connection->transact) {
@@ -986,8 +986,6 @@ static VALUE connection_transaction(int argc, VALUE *argv, VALUE self)
 	rb_scan_args(argc, argv, "01", &opt);
 	Data_Get_Struct(self, struct FbConnection, fb_connection);
 
-	if (opt != Qnil) {printf("connection_transaction: %s\n", StringValuePtr(opt));}
-	//if (opt == Qnil) { opt = rb_ro_trans_p(); }
 	fb_connection_transaction_start(fb_connection, opt);
 
 	if (rb_block_given_p()) {
@@ -2209,7 +2207,6 @@ static VALUE cursor_execute(int argc, VALUE* argv, VALUE self)
 		if (statement_type == isc_info_sql_stmt_select) {
 			fb_connection_transaction_start(fb_connection, rb_ro_trans_p());
 		} else {
-			printf("Running cause statement not select\n");
 			fb_connection_transaction_start(fb_connection, Qnil);
 		}
 		fb_cursor->auto_transact = fb_connection->transact;
